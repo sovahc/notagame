@@ -824,8 +824,7 @@ async function main() {
 	}
 
 	function handleClick(x, y) {
-		//const np = normalizedPos(x, y);
-		//if(mainMenu) menu.click(np);
+		if (audio != null && audio.state === 'suspended') audio.resume();
 	}
 
 	let level = 0;
