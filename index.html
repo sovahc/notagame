@@ -4,13 +4,13 @@
         body { margin: 0; overflow: hidden; background: black; }
         #ui { position: absolute; top: 10px; left: 10px; z-index: 10; color: white }
         canvas { display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-        #collisionCount {
+        #debug1 {
             position: absolute;
             top: 10px;
             right: 10px;
             color: yellow;
             font-size: 24px;
-            font-family: Arial, sans-serif;
+            font-family: Courier;
             z-index: 10;
         }
     </style>
@@ -18,16 +18,15 @@
 </head>
 <body>
     <div id="ui">
-        <input type="file" id="audioFile" accept=".mp3, .wav">
-        <div id="collisionCount">Collisions: 0</div>
+        <div id="debug">Debug</div>
     </div>
     <canvas id="canvas"></canvas>
     <script>
-class ZeroTime
-{   s() { return 0; }
+class ZeroTime {
+		s() { return 0; }
 }
 
-class AudioTime{
+class AudioTime {
 	constructor(audio) { this.audio = audio; }
 
 	s() { return this.audio.currentTime; }
@@ -38,8 +37,8 @@ let time = new ZeroTime();
 function rand(min, max) { return min + Math.random() * (max - min); }
 
 function clamp(v, min, max) {
-	if(v < min) return min;
-	if(v > max) return max;
+	if (v < min) return min;
+	if (v > max) return max;
 	return v;
 }
 
@@ -61,7 +60,7 @@ function HSVtoRGB(h, s, v) {
 		case 4: r = t, g = p, b = v; break;
 		case 5: r = v, g = p, b = q; break;
 	}
-	return {r: r, g: g, b: b};
+	return { r: r, g: g, b: b };
 }
 
 function fft(real, imag) {
@@ -112,7 +111,7 @@ class Spectrogram {
 
 	averageChannels() {
 		const numChannels = this.audioBuffer.numberOfChannels;
-		if(numChannels == 1) return this.audioBuffer.getChannelData(0);
+		if (numChannels == 1) return this.audioBuffer.getChannelData(0);
 
 		const length = this.audioBuffer.length;
 		const waveform = new Float32Array(length);
@@ -226,7 +225,7 @@ class LeftScrollingTexture {
 
 	update(newOffset, fromData) {
 		if (newOffset === this.currentOffset) return;
-		
+
 		const shift = newOffset - this.currentOffset;
 		this.currentOffset = newOffset;
 
@@ -236,9 +235,9 @@ class LeftScrollingTexture {
 				const col = newOffset + shift - x;
 				const baseIndex = (this.w - 1 - x) * 4;
 
-				if(col >= 0 && col < fromData.length) {
+				if (col >= 0 && col < fromData.length) {
 					for (let y = 0; y < this.h; y++) {
-						
+
 						const index = (y * this.w * 4) + baseIndex;
 						this.data[index] = this.data[index + 1] = this.data[index + 2] = fromData[col][y];
 						this.data[index + 3] = 255;
@@ -262,7 +261,7 @@ class Background {
 		// random RGB colors
 		const colors = Array(16).fill().map(() => new THREE.Vector3(1, 1, 1));
 
-		for(let i = 0; i < colors.length; ++i) {
+		for (let i = 0; i < colors.length; ++i) {
 			//const c = HSVtoRGB(i / colors.length, 1, 1);
 			const c = HSVtoRGB(Math.random(), 1, 1);
 			colors[i] = new THREE.Vector3(c.r, c.g, c.b);
@@ -273,9 +272,11 @@ class Background {
 			uniforms: {
 				tex: { value: this.texture.texture },
 				frac: { value: 0.0 },
-				iResolution: { value: new THREE.Vector2(
-					window.innerWidth * window.devicePixelRatio,
-					window.innerHeight * window.devicePixelRatio) },
+				iResolution: {
+					value: new THREE.Vector2(
+						window.innerWidth * window.devicePixelRatio,
+						window.innerHeight * window.devicePixelRatio)
+				},
 				colors: { value: colors }
 			},
 			vertexShader: `
@@ -311,10 +312,9 @@ class Background {
 						}`
 		});
 		this.mesh = new THREE.Mesh(this.geometry, this.material);
-		//this.mesh.renderOrder = 0;
 	}
 
-	setFractionalOffset(o) { this.material.uniforms.frac.value = o; }
+	setFractionalOffset(fo) { this.material.uniforms.frac.value = fo; }
 	updateTexture(newOffset) { this.texture.update(newOffset, this.spectrogram.data); }
 	getTexture() { return this.texture; }
 	getNumFrames() { return this.spectrogram.numFrames; }
@@ -323,23 +323,27 @@ class Background {
 class Laser {
 	constructor(color = 0xff00, width = 0.2) {
 		this.width = width;
-		
+
 		const geometry = new THREE.PlaneGeometry(width, 1);
-		const material = new THREE.MeshBasicMaterial({ color : color, side: THREE.DoubleSide });
+		const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
 		this.mesh = new THREE.Mesh(geometry, material);
 
 		this.mesh.visible = false;
 		this.mesh.renderOrder = 10;
+
+		this.direction = new THREE.Vector3();
 	}
 
 	on(start, end) {
-		const direction = end.clone().sub(start);
-		const length = direction.length();
+		this.direction.copy(end);
+		this.direction.sub(start);
+		const length = this.direction.length();
 
 		this.mesh.scale.set(this.width, length, 1);
-		this.mesh.position.copy(start.clone().add(direction.multiplyScalar(0.5)));
+		this.mesh.position.copy(start);
+		this.mesh.position.addScaledVector(this.direction, 0.5);
 
-		const angle = Math.atan2(direction.x, -direction.y);
+		const angle = Math.atan2(this.direction.x, -this.direction.y);
 		this.mesh.rotation.set(0, 0, angle);
 
 		this.mesh.visible = true;
@@ -350,7 +354,7 @@ class Laser {
 	}
 }
 
-function createEquilateralPolygon(sides, radius, rotate) {   
+function createEquilateralPolygon(sides, radius, rotate) {
 	const vertices = [];
 	const angleStep = (2 * Math.PI) / sides;
 	for (let i = 0; i < sides; i++) {
@@ -372,11 +376,11 @@ function createEquilateralPolygon(sides, radius, rotate) {
 }
 
 function createEquilateralMesh(color, sides, radius, rotate = 0) {
-	
+
 	const p = createEquilateralPolygon(sides, radius, rotate);
 
 	const geometry = new THREE.BufferGeometry();
-	
+
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(p.vertices, 3));
 	geometry.setIndex(p.indices);
 
@@ -386,33 +390,25 @@ function createEquilateralMesh(color, sides, radius, rotate = 0) {
 }
 
 class Entity {
-	constructor(mesh, position, speed, radius) {
-		this.mesh = mesh;
-		this.mesh.position.copy(position ? position :  new THREE.Vector3(10, rand(-9, 9), 0));
-		this.speed = speed ? speed.clone() : new THREE.Vector3(0, 0, 0);
+	constructor(mesh, position, vector, radius) {
+
+		if (mesh) {
+			this.mesh = mesh;
+			this.mesh.position.copy(position ? position : new THREE.Vector3(10, rand(-9, 9), 0)); /// XXXXXXXXXXXXXXXXXXXXX
+		}
+		this.vector = vector ? vector.clone() : new THREE.Vector3(0, 0, 0);
 		this.radius = radius;
+
+		this.speed = 1.0;
 
 		this.destroyed = false;
 	}
 
-	update(delta) {
-		this.mesh.position.add(this.speed.clone().multiplyScalar(delta));
+	move(delta) {
+		this.mesh.position.addScaledVector(this.vector, delta * this.speed);
 	}
-
-	enemyUpdate(delta, autoGuidanceFactor = 1)
-	{
-		if(autoGuidanceFactor != 0) {
-			const dir = this.player.mesh.position.clone();
-			dir.sub(this.mesh.position);
-			dir.normalize();
-			const speed = this.speed.length();
-			const targetSpeed = dir.multiplyScalar(speed);
-		
-			this.speed.lerp(targetSpeed, delta * autoGuidanceFactor);
-		}
-
-		this.mesh.position.add(this.speed.clone().multiplyScalar(delta));
-
+	
+	common(delta) {
 		if (this.mesh.position.x < -10 - 0.5) {
 			this.destroyed = true;
 		}
@@ -425,11 +421,29 @@ class Entity {
 		if (this.health / this.maxHealth < 0.2) {
 			this.health -= 0.2 * this.maxHealth * delta;
 		}
-
-		this.mesh.material.opacity = this.health / this.maxHealth;
-
 		if (this.health <= 0) this.destroyed = true;
 	}
+}
+
+function findNearest(array, xy, inRadius = 2, currentNearest = null) {
+
+	let minimal = Infinity;
+
+	if (currentNearest) {
+		minimal = xy.distanceTo(currentNearest.mesh.position);
+	}
+
+	array.forEach(a => {
+		if (!a.destroyed) {
+			const distance = xy.distanceTo(a.mesh.position);
+			if (distance < inRadius && distance < minimal) {
+				minimal = distance;
+				currentNearest = a;
+			}
+		}
+	});
+
+	return currentNearest;
 }
 
 class PlayerShip extends Entity {
@@ -437,36 +451,62 @@ class PlayerShip extends Entity {
 		const r = 0.5;
 		const mesh = createEquilateralMesh(0xFFffFF, 3, r);
 		super(mesh, new THREE.Vector3(-9.5, 0, 0), null, r);
-		
+
+		this.score = 0;
+
+		this.reset();
+	}
+
+	reset() {
 		this.nextMoveTime = time.s() + 1;
-		
-		this.collisionCount = 0;
 	}
 
 	hit() {
-		this.collisionCount++;
+		this.score -= 100;
 
 		this.redFlash.opacity = 0.25;
 		this.redFlash.visible = true;
-		
-		document.getElementById('collisionCount').textContent = `Collisions: ${this.collisionCount}`;
 	}
 
-	update(delta) {
+	playerLogic(delta, avoid1, avoid2) {
+		
 		const t = time.s();
-		if(t >= this.nextMoveTime)
-		{   this.nextMoveTime = t + rand(3, 5);
-			
-			let direction = Math.random() < 0.5 ? 1 : -1;
-			if(this.mesh.position.y < -9) direction = 1;
-			if(this.mesh.position.y > 9) direction = -1;
+		if (t >= this.nextMoveTime) {
 
-			this.speed.set(0, direction, 0);
+			let nearest = null;
+
+			nearest = findNearest(avoid1, this.mesh.position, 5, nearest);		
+			nearest = findNearest(avoid2, this.mesh.position, 5, nearest);
+
+			let direction = 0;
+			if(nearest != null) {
+				//console.log("collision avoidance");
+				this.nextMoveTime = t + 0.5;
+
+				if(nearest.mesh.position.y < this.mesh.position.y) direction = +1;
+				else direction = -1;
+
+				if (this.mesh.position.y < -9) direction = 1;
+				if (this.mesh.position.y > 9) direction = -1;
+			}
+			else {
+				//console.log("random movement");
+				this.nextMoveTime = t + 1.5;
+
+				direction = Math.random() < 0.5 ? 1 : -1;
+
+				if (this.mesh.position.y < -3) direction = 1;
+				if (this.mesh.position.y > 3) direction = -1;
+			}
+
+			this.vector.set(0, direction, 0);
 		}
 
-		if(this.redFlash.opacity > 0) {
+		this.move(delta);
+
+		if (this.redFlash.opacity > 0) {
 			this.redFlash.opacity -= delta * 2;
-			if(this.redFlash.opacity < 0) {
+			if (this.redFlash.opacity < 0) {
 				this.redFlash.opacity = 0;
 				this.redFlash.visible = false;
 			}
@@ -474,25 +514,23 @@ class PlayerShip extends Entity {
 	}
 }
 
-class Explosion extends Entity
-{
+class Explosion extends Entity {
 	constructor(position, speed, radius) {
 		const mesh = createEquilateralMesh(0xFFFFFF, 32, 0.5);
 		mesh.material.opacity = 0.25;
-		//mesh.renderOrder = 1;
 
 		super(mesh, position, speed, radius);
 	}
 
-	update(delta)
-	{   super.update(delta);
-		
+	update(delta) {
+		super.move(delta);
+
 		this.mesh.material.opacity -= delta * 0.5;
 		this.mesh.scale.multiplyScalar(1 + delta * 2.0);
-		this.speed.multiplyScalar(1 - delta);
+		this.vector.multiplyScalar(1 - delta);
 
-		if(this.mesh.material.opacity < 0)
-		{   this.mesh.material.opacity = 0;
+		if (this.mesh.material.opacity < 0) {
+			this.mesh.material.opacity = 0;
 			this.destroyed = true;
 		}
 	}
@@ -501,173 +539,240 @@ class Explosion extends Entity
 class Asteroid extends Entity {
 	constructor() {
 		const radius = rand(0.25, 1);
-		const mesh = createEquilateralMesh(0x707070, 32, radius);
 
-		super(mesh, null, new THREE.Vector3( - rand(0.25, 0.5), 0, 0), radius);
+		const density = Math.floor(rand(1, 8));
 
-		this.maxHealth = this.health = rand(0.5, 3);
+		const mesh = createEquilateralMesh(0x404040 + 0x101010 * density, 32, radius);
+
+		super(mesh, null, new THREE.Vector3(- rand(0.5, 1.5), 0, 0), radius);
+
+		this.maxHealth = this.health = 1 + density / 2;
 	}
 
-	update(delta)
-	{   super.enemyUpdate(delta, 0);
-		
+	update(delta) {
+		super.move(delta);
+		super.common(delta);
+
 		this.mesh.material.opacity = 1.0; // overwrite
 		const s = Math.sqrt(this.health / this.maxHealth);
 		this.mesh.scale.set(s, s, 1);
 	}
 }
 
-class FastEnemy extends Entity {
-
-	constructor() {
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0xFF0000, 3, r, Math.PI);
-		super(mesh, null, new THREE.Vector3(-5, 0, 0), r);
-
-		this.maxHealth = this.health = 0.01;
-	}
-
-	update(delta) { super.enemyUpdate(delta); }
+class Block {
+	constructor(mesh) { this.mesh = mesh; }
+	initialize(ship) {}
 }
 
-class HeavyEnemy extends Entity {
-	constructor() {
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0x0000ff, 4, r, Math.PI / 4);
+const blockR = 0.5;
 
-		super(mesh, null, new THREE.Vector3(-2, 0, 0), r);
+class FastBlock extends Block {
+	constructor() { super(createEquilateralMesh(0xFF0000, 3, blockR, Math.PI)); }
 
-		this.health = this.maxHealth = 1.0;
-	}
-
-	update(delta) { super.enemyUpdate(delta); }
+	initialize(ship) { ship.health = ship.maxHealth = 0.1; ship.speed = 2.5; ship.homing = 1; }
 }
 
-class InvisibleEnemy extends Entity {
-	constructor() {
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0x0000ff, 4, r, Math.PI / 4);
+class HeavyBlock extends Block {
+	constructor() { super(createEquilateralMesh(0x0000ff, 4, blockR, Math.PI / 4)); }
 
-		super(mesh, null, new THREE.Vector3(-0.5, 0, 0), r);
-
-		this.maxHealth = 5.0;
-		this.health = 2.0;
-	}
-
-	update(delta) { super.enemyUpdate(delta); }
+	initialize(ship) { ship.health = 2; ship.maxHealth = 2; ship.speed = 0.333; }
 }
 
-class SineEnemy extends Entity {
-	constructor() {
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0x00ff00, 4, r);
+class InvisibleBlock extends Block {
+	constructor() { super(createEquilateralMesh(0x0000ff, 4, blockR, Math.PI / 4)); }
 
-		super(mesh, null, new THREE.Vector3(-2, 0, 0), r);
-
-		this.health = this.maxHealth = 1.0;
-
-		this.initialY = this.mesh.position.y;
-	}
-
-	update(delta)
-	{   super.enemyUpdate(delta, 0);
-
-		const dist = this.mesh.position.distanceTo(this.player.mesh.position);
-		const maxAmplitude = 5.0;
-		const minAmplitude = 1;
-		const maxDistance = 20.0;
-		const amplitude = minAmplitude + (maxAmplitude - minAmplitude) * (1 - Math.min(dist / maxDistance, 1));
-
-		this.mesh.position.y = this.initialY + amplitude * Math.sin(time.s() * 5.0);
-	}
+	initialize(ship) { ship.opacityMultiplier = 0.3; }
 }
 
-class HexEnemy extends Entity {
-	constructor(scene) {
+class SineBlock extends Block {
+	constructor() { super(createEquilateralMesh(0x00ff00, 4, blockR, 0)); }
+
+	update(ship) {
+		if(this.initialY == null) this.initialY = ship.mesh.position.y;
 		
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0xF000F0, 6, r);
+		const dtp = ship.mesh.position.distanceTo(ship.player.mesh.position);
+		const maximalDistance = 20.0;
+		const amplitude = 1 + 4 * (1 - Math.min(dtp / maximalDistance, 1));
 
-		super(mesh, null, new THREE.Vector3(-0.5, 0, 0), r);
+		ship.mesh.position.y = this.initialY + amplitude * Math.sin(time.s() * 5.0);
+	}
+}
 
-		this.health = this.maxHealth = 1.0;
+class LaserBlock extends Block {
+	constructor() { super(createEquilateralMesh(0xF000F0, 6, blockR, 0));  }
+	initialize(ship) { ship.shootsEvery = 5; }
+}
 
-		const t = time.s();
-		this.nextMoveTime = t + 2;
-		this.nextShootTime = t + 5;
-		this.nextPlayerHitTime = t + 7;
+class BlinkerBlock extends Block {
+	constructor() { super(createEquilateralMesh(0x00ffFF, 5, blockR, Math.PI)); }
+	initialize(ship) { ship.teleportFrequency = 0.25; }
+}
 
+class EnemyShip extends Entity {
+	constructor(scene, block) {
+		const group = new THREE.Group();
+		group.add(block.mesh);
+
+		super(group, null, new THREE.Vector3(-1, 0, 0), blockR);
+		
 		this.scene = scene;
+		
+		this.health = this.maxHealth = 1.0;
+		this.speed = rand(0.75, 1.25);
+		this.homing = 0;
+		this.opacityMultiplier = 1.0;
+		this.shootsEvery = -1;
+		this.teleportFrequency = 0;
+
+		block.initialize(this);
+
+		this.blocks = [block];
+
+		scene.add(this.mesh);
 	}
 
 	update(delta) {
-		const t = time.s();
 
-		if(t >= this.nextMoveTime)
-		{   this.nextMoveTime = t + 2;
-			
-			let direction = Math.random() < 0.5 ? 1 : -1;
-			if(this.mesh.position.y < -9) direction = 1;
-			if(this.mesh.position.y > 9) direction = -1;
+		if (this.homing && this.homing > 0) {
+			if (this.direction == null) this.direction = new THREE.Vector3();
 
-			this.speed.set(0, direction, 0);
+			this.direction.copy(this.player.mesh.position);
+			this.direction.sub(this.mesh.position);
+			this.direction.normalize();
+			const vl = this.vector.length();
+			const targetSpeed = this.direction.multiplyScalar(vl);
+
+			this.vector.lerp(targetSpeed, delta * this.homing);
 		}
-		if(t >= this.nextShootTime)
-		{   if(this.laser == null)
-			{   this.laser = new Laser(0xF000F0, 0.2);
-				this.scene.add(this.laser.mesh);
+
+		this.move(delta);
+		this.common(delta);
+
+		this.blocks.forEach(block => { if(block.update) block.update(this); } );
+
+		if (this.shootsEvery > 0) {
+
+			const t = time.s();
+
+			if (this.nextShootTime == null) {
+				this.nextShootTime = t + this.shootsEvery;
+				this.playerHitTime = this.nextShootTime + 2;
 			}
-			this.laser.on(this.mesh.position, this.player.mesh.position);
+
+			if (t >= this.nextShootTime) {
+				if (this.laser == null) {
+					this.laser = new Laser(0xF000F0, 0.2);
+					this.scene.add(this.laser.mesh);
+				}
+				this.laser.on(this.mesh.position, this.player.mesh.position);
+			}
+			if (t >= this.playerHitTime) {
+				this.player.hit();
+				this.laser.off();
+
+				this.nextShootTime = this.playerHitTime = null;
+			}
 		}
-		if(t >= this.nextPlayerHitTime)
-		{   
-			this.player.hit();
-			this.laser.off();
 
-			this.nextShootTime = t + 5;
-			this.nextPlayerHitTime = t + 6;
-		}
-
-		super.enemyUpdate(delta, 0);
-
-		if(this.destroyed && this.laser)
-		{   this.scene.remove(this.laser.mesh);
+		if (this.destroyed && this.laser) {
+			this.scene.remove(this.laser.mesh);
 			this.laser = null;
 		}
+
+		if(this.teleportFrequency) {
+			const t = time.s();
+
+			const teleportEvery = 1 / this.teleportFrequency;
+			
+			if(this.nextBlinkTime == null) this.nextBlinkTime = t + teleportEvery;
+		
+			if (t > this.nextBlinkTime) {
+				this.nextBlinkTime = t + teleportEvery;
+				this.mesh.position.set(rand(-9, 9), rand(-9, 9), 0);
+			}
+		}
+	
+		const opacity = this.health / this.maxHealth * this.opacityMultiplier;
+		this.mesh.children.forEach(child => child.material.opacity = opacity );
+	}
+
+	combineWith(other) {
+		this.scene.remove(other.mesh);
+		
+		other.mesh.children.forEach(mesh => this.mesh.add(mesh));
+		other.blocks.forEach(block => this.blocks.push(block));
+		
+		this.health += other.health;
+		this.maxHealth += other.maxHealth;
+		this.speed += other.speed;
+		this.homing += other.homing;
+		this.teleportFrequency += other.teleportFrequency;
+
+		if(other.laser) { // fix
+			this.scene.remove(other.laser.mesh);
+			other.laser.mesh = null;
+		}
 	}
 }
 
-class BlinkerEnemy extends Entity {
-	constructor() {
-		const r = 0.5;
-		const mesh = createEquilateralMesh(0x00ffFF, 5, r, Math.PI);
+const LEVELS = {
+    spawn: [Asteroid, FastBlock, HeavyBlock, InvisibleBlock, SineBlock, BlinkerBlock, LaserBlock ],
+    levels: {
+		0: [1, 100, 20, 5, 5, 1, 1], // Easy
+		1: [2, 50, 20, 10, 10, 10, 10], // Every enemy
+		2: [1, 500, .1, .1, .1, 5, .1], // Red attack
+		3: [80, 5, 5, 5, 5, 5, 25], // Asteroid field
+		4: [1, 50, 0, 0, 5, 100, 10], // Mega blink
+		5: [1, 100, 1, 1, 50, 1, 5], // Green sweep
+    }
+};
 
-		super(mesh, null, new THREE.Vector3(0, 0, 0), r);
+function randomBlockClass(level) {
+    const chances = LEVELS.levels[level % 6];
 
-		this.health = this.maxHealth = 1.0;
+    for (let i = 0; i < chances.length; i++) {
+        if(chances[i] > Math.random() * 1000) return LEVELS.spawn[i];
+    }
 
-		this.nextBlinkTime = time.s() + 2.5;
+    return null;
+}
+
+async function loadFile(url) {
+	const response = await fetch(url);
+	const total = parseInt(response.headers.get('content-length'), 10);
+	let loaded = 0;
+
+	const reader = response.body.getReader();
+	const chunks = [];
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		chunks.push(value);
+		loaded += value.length;
+		document.getElementById('debug').textContent = `Loading: ${Math.round((loaded / total) * 100)}%`;
 	}
 
-	update(delta) {
-		const t = time.s();
-		
-		if(t > this.nextBlinkTime) {
-			this.nextBlinkTime = t + 2.5;
-			this.mesh.position.set(rand(-9, 9), rand(-9, 9), 0);
-		}
-		
-		super.enemyUpdate(delta, 0);
-	}
+	return new Blob(chunks);
 }
 
 async function main() {
-	const input = document.getElementById('audioFile');
+
 	const canvas = document.getElementById('canvas');
-	let audio, sourceNode, background, duration;
 
 	const scene = new THREE.Scene();
 	const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0, 10);
+
+	const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", });
+	renderer.setPixelRatio(window.devicePixelRatio);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	window.addEventListener('resize', () => {
+		renderer.setPixelRatio(window.devicePixelRatio);
+		renderer.setSize(window.innerWidth, window.innerHeight);
+	});
+
+	let audio, sourceNode, background, duration;
 
 	function normalizedPos(clientX, clientY) {
 		const x = (clientX / window.innerWidth) * 20 - 10;
@@ -675,13 +780,64 @@ async function main() {
 		return { x, y };
 	}
 
-	const renderer = new THREE.WebGLRenderer({ canvas });
-	renderer.setPixelRatio(window.devicePixelRatio);
-	renderer.setSize(window.innerWidth, window.innerHeight);
-	window.addEventListener('resize', () => {
-		renderer.setPixelRatio(window.devicePixelRatio);
-		renderer.setSize(window.innerWidth, window.innerHeight);
+	document.addEventListener('keydown', (e) => {
+		if (e.key === ' ') {
+			if (audio != null) {
+				if (audio.state === 'suspended') audio.resume();
+				else audio.suspend();
+			}
+		}
+		else if(e.key === 'n') { levelComplete = true; } /// ???????????
 	});
+
+	canvas.addEventListener('mousemove', (e) => {
+		handleHover(e.clientX, e.clientY);
+	});
+
+	canvas.addEventListener('click', (e) => {
+		handleClick(e.clientX, e.clientY);
+	});
+
+	canvas.addEventListener('touchmove', (e) => {
+		e.preventDefault();
+		if (e.touches.length > 0) {
+			const touch = e.touches[0];
+			handleHover(touch.clientX, touch.clientY);
+		}
+	},{ passive: false });
+
+	canvas.addEventListener('touchstart', (e) => {
+		e.preventDefault();
+		if (e.touches.length > 0) {
+			const touch = e.touches[0];
+			handleClick(touch.clientX, touch.clientY);
+		}
+	},{ passive: false });
+
+	function handleHover(x, y) {
+		const np = normalizedPos(x, y);
+
+		const hoverRadius = 2;
+		const xy = new THREE.Vector3(np.x, np.y, 0);
+		hoveredEnemy = findNearest(enemies, xy, hoverRadius);
+		hoveredEnemy = findNearest(asteroids, xy, hoverRadius, hoveredEnemy);
+	}
+
+	function handleClick(x, y) {
+		//const np = normalizedPos(x, y);
+		//if(mainMenu) menu.click(np);
+	}
+
+	let level = 0;
+
+	let enemies = [];
+	let explosions = [];
+	let asteroids = [];
+
+	let hoveredEnemy = null;
+
+	let lastAnimateTime = 0;
+	let lastSpawnTime = 0;
 
 	const playerLaser = new Laser();
 	scene.add(playerLaser.mesh);
@@ -695,153 +851,103 @@ async function main() {
 	scene.add(playerShip.mesh);
 
 	const flashGeometry = new THREE.PlaneGeometry(20, 20);
-	const flashMaterial = new THREE.MeshBasicMaterial({
-		color: 0xff0000,
-		transparent: true,
-		opacity: 0.25
-	});
+	const flashMaterial = new THREE.MeshBasicMaterial({color: 0xff0000,transparent: true, opacity: 0.25});
 	const redFlash = new THREE.Mesh(flashGeometry, flashMaterial);
 	redFlash.visible = false;
-	//redFlash.renderOrder = 20;
 	scene.add(redFlash);
 
 	playerShip.redFlash = redFlash;
 
-	let enemies = [];
-	let explosions = [];
-	let asteroids = [];
+	let loadingStarted = false;
+	let loadingComplete = false;
+	let levelComplete = false;
 
-	let hoveredEnemy = null;
+	async function loadLevel() {
+		
+		const mp3 = './music/level' + level + '.mp3';
+		const audioBlob = await loadFile(mp3);
 
-	let lastProcessedFrame = -1;
-	let lastAnimateTime = 0;
+		audio = new (window.AudioContext || window.webkitAudioContext)();
 
-	document.addEventListener('keydown', (e) => {
-		if (e.key === ' ') {
-			if (audio != null) {
-				if (audio.state === 'suspended') audio.resume();
-				else audio.suspend();
-			}
-		}
-	});
+		const arrayBuffer = await audioBlob.arrayBuffer();
+		const audioBuffer = await audio.decodeAudioData(arrayBuffer);
+		duration = audioBuffer.duration;
 
-	function findNearest(array, x, y, currentNearest = null) {
-		const markingRadius = 2;
+		background = new Background(audioBuffer);
+		scene.add(background.mesh);
 
-		let minimal = Infinity;
-		const xy0 = new THREE.Vector3(x, y, 0);
+		if (audio.state === 'suspended') audio.resume();
 
-		if(currentNearest) {
-			minimal = xy0.distanceTo(currentNearest.mesh.position);
-		}
+		sourceNode = audio.createBufferSource();
+		sourceNode.buffer = audioBuffer;
+		sourceNode.connect(audio.destination);
 
-		array.forEach(a => {
-			if (!a.destroyed) {
-				const distance = xy0.distanceTo(a.mesh.position);
-				if (distance < markingRadius && distance < minimal) {
-					minimal = distance;
-					currentNearest = a;
-				}
-			}
-		});
+		sourceNode.onended = function() { levelComplete = true; };
 
-		return currentNearest;
+		sourceNode.start();
+
+		time = new AudioTime(audio);
+
+		// reset vars
+		hoveredEnemy = null;
+		lastAnimateTime = 0;
+		lastSpawnTime = 0;
+		playerShip.reset();
+		//
+
+        loadingComplete = true;
 	}
 
-	function handleHover(pos) {
-		hoveredEnemy = findNearest(enemies, pos.x, pos.y);
-		hoveredEnemy = findNearest(asteroids, pos.x, pos.y, hoveredEnemy);
+	function nextLevel() {
+		audio.suspend();
+		sourceNode.stop();
+        sourceNode.disconnect();
+        sourceNode = null;
+
+		levelComplete = false;
+		loadingStarted = loadingComplete = false;
+		++level;
 	}
 
-	canvas.addEventListener('mousemove', (e) => {
-		const pos = normalizedPos(e.clientX, e.clientY);
-		handleHover(pos);
-	});
-
-	canvas.addEventListener('touchmove', (e) => {
-		e.preventDefault();
-		if (e.touches.length > 0) {
-			const touch = e.touches[0];
-			const pos = normalizedPos(touch.clientX, touch.clientY);
-			handleHover(pos);
-		}
-	});
-
-	function spawnEnemiesFromFrame(frame) {
-		if (frame < 0 || frame >= background.getNumFrames()) return;
-
-		if(rand(0, 100) <= 1) {
-			const a = new Asteroid();
-			scene.add(a.mesh);
-			a.player = playerShip;
-			asteroids.push(a);
-		}
-
-		const spec = background.spectrogram.data[frame];
-		const numBinsToCheck = 128;
-		const minVal = 127;
-		const maxVal = 255;
-		const maxProb = 0.03;
-		for (let bin = 0; bin < numBinsToCheck; bin++) {
-			if (bin >= spec.length) break;
-			const val = spec[bin];
-			if (val < minVal) continue;
-			const prob = (val - minVal) / (maxVal - minVal) * maxProb;
-			if (Math.random() < prob) {
-				//const y = -1 + (bin / (numBinsToCheck - 1)) * 2;
-				//const position = new THREE.Vector3(10, y, 0);
-				let enemy;
-				const r = rand(0, 100);
-				if (r < 10) {
-					enemy = new InvisibleEnemy();
-				}
-				else if (r < 20) {
-					enemy = new SineEnemy();
-				}
-				else if (r < 25) {
-					enemy = new HexEnemy(scene);
-				}
-				else if (r < 30) {
-					enemy = new BlinkerEnemy();
-				}
-				else if (r < 45) {
-					enemy = new HeavyEnemy();
-				}
-				else {
-					enemy = new FastEnemy();
-				}
-
-				enemy.player = playerShip;
-				
-				scene.add(enemy.mesh);
-				enemies.push(enemy);
-			}
-		}
-	}
+	requestAnimationFrame(animate);
 
 	function animate() {
 		requestAnimationFrame(animate);
 
-		if (!sourceNode) return;
-		if (audio.state !== 'running') return;
+		if(!loadingStarted) {
+			loadingStarted = true;
+			loadLevel(); // async
+		}
+
+		if(!loadingComplete) {
+			renderer.render(scene, camera);
+			return;
+		}
+
+		if(levelComplete) {
+			nextLevel();
+			return;
+		}
 
 		const t = time.s();
+
 		const delta = t - lastAnimateTime;
 		lastAnimateTime = t;
 
-		if(hoveredEnemy && hoveredEnemy.destroyed) hoveredEnemy = null;
+		if (hoveredEnemy && hoveredEnemy.destroyed) hoveredEnemy = null;
 
-		if (hoveredEnemy ) {
+		if (hoveredEnemy) {
 			hoveredEnemy.health -= delta;
-		
+			playerShip.score += delta;
+
 			playerLaser.on(playerShip.mesh.position, hoveredEnemy.mesh.position);
 		} else {
 			playerLaser.off();
 		}
 
-		playerShip.update(delta);
+		playerShip.playerLogic(delta, enemies, asteroids);
 
-		function removeDestroyed(array, withExplosions) {
+		function updateAndRemoveDestroyed(array, withExplosions) {
 
 			for (let i = array.length - 1; i >= 0; i--) {
 				array[i].update(delta);
@@ -850,101 +956,93 @@ async function main() {
 				const entity = array[i];
 				scene.remove(entity.mesh);
 
-				if(withExplosions) {
-					const x = new Explosion(entity.mesh.position, entity.speed, entity.radius)
+				if (withExplosions) {
+					const x = new Explosion(entity.mesh.position, entity.vector, entity.radius)
 					explosions.push(x);
 					scene.add(x.mesh);
 				}
-			
+
 				array.splice(i, 1);
 			}
 		}
 
-		removeDestroyed(enemies, true);
-		removeDestroyed(asteroids, true);
-		removeDestroyed(explosions, false);
+		updateAndRemoveDestroyed(enemies, true);
+		updateAndRemoveDestroyed(asteroids, true);
+		updateAndRemoveDestroyed(explosions, false);
 
-		const maxShipRadius = 0.5;
+		const searchRadius = blockR;
 
 		enemies.sort((a, b) => a.mesh.position.x - b.mesh.position.x);
 
 		let minDistSquared = Infinity;
 
-		let nearest1 = null;
-		let nearest2 = null;
-		
+		let nearest1 = -1;
+		let nearest2 = -1;
+
 		for (let i = 0; i < enemies.length; i++) {
 			const cI = enemies[i].mesh.position;
 			const rI = enemies[i].radius;
 
-    		for (let j = i + 1; j < enemies.length; j++) {
+			for (let j = i + 1; j < enemies.length; j++) {
 				const cJ = enemies[j].mesh.position;
 				const rJ = enemies[j].radius;
 
-      			const distX = Math.abs(cI.x - cJ.x);
+				const distX = Math.abs(cI.x - cJ.x);
 
-				if (distX > maxShipRadius * 2) break;
+				if (distX > searchRadius * 2) break;
 
-      			const distY = Math.abs(cI.y - cJ.y);
-      			if (distY > maxShipRadius * 2) continue; // optional
+				const distY = Math.abs(cI.y - cJ.y);
+				if (distY > searchRadius * 2) continue; // optional
 
 				const distSquared = distX * distX + distY * distY;
 				if (distSquared <= minDistSquared) {
-        			minDistSquared = distSquared;
-					nearest1 = enemies[i];
-					nearest2 = enemies[j];
-      			}
-    		}
-  		}
-
-		if(nearest1) {
-			debugMark.on(nearest1.mesh.position, nearest2.mesh.position);
+					minDistSquared = distSquared;
+					nearest1 = i;
+					nearest2 = j;
+				}
+			}
 		}
-		else debugMark.off();
 
+		if (nearest1 >= 0) {
+			enemies[nearest1].combineWith(enemies[nearest2]);
+			enemies.splice(nearest2, 1); // nearest2 > nearest1
+		}
+
+		while(t > lastSpawnTime) {
+			const spawnRate = 0.1;
+			lastSpawnTime += spawnRate;
+			const blockClass = randomBlockClass(level);
+
+			if(blockClass == null) continue;
+
+			if(blockClass == Asteroid) {
+				const a = new Asteroid();
+				scene.add(a.mesh);
+				a.player = playerShip;
+				asteroids.push(a);
+			}
+			else {
+				const enemy = new EnemyShip(scene, new blockClass());
+
+				enemy.player = playerShip;
+				enemies.push(enemy);
+			}
+		}
 
 		const offset = audio.currentTime / duration * background.getNumFrames();
 		const specFrame = Math.floor(offset);
-		if (specFrame > lastProcessedFrame) {
-			for (let frame = lastProcessedFrame + 1; frame <= specFrame; frame++) {
-				spawnEnemiesFromFrame(frame);
-			}
-			lastProcessedFrame = specFrame;
-		}
 		background.setFractionalOffset(offset - specFrame);
 		background.updateTexture(specFrame);
 
+		document.getElementById('debug').textContent =
+			//`enemies count: ${enemies.length}`;
+			`Score: ${playerShip.score}`;
+
 		renderer.render(scene, camera);
 	}
-
-	input.addEventListener('change', async (e) => {
-		const file = e.target.files[0];
-		audio = new (window.AudioContext || window.webkitAudioContext)();
-
-		const audioBuffer = await audio.decodeAudioData(await file.arrayBuffer());
-		duration = audioBuffer.duration;
-
-		if(background != null) {
-			scene.remove(background.mesh);
-		}
-		background = new Background(audioBuffer);
-		scene.add(background.mesh);
-
-		// Start playback automatically
-		if (audio.state === 'suspended') audio.resume();
-
-		sourceNode = audio.createBufferSource();
-		sourceNode.buffer = audioBuffer;
-		sourceNode.connect(audio.destination);
-		sourceNode.start();
-
-		time = new AudioTime(audio);
-		
-		animate();
-	});
 }
 
 main();
-	</script>
+    </script>
 </body>
 </html>
