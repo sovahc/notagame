@@ -864,7 +864,7 @@ async function main() {
 
 	async function loadLevel() {
 		
-		const mp3 = './music/level' + level + '.mp3';
+		const mp3 = './music/Level' + level + '.mp3';
 		const audioBlob = await loadFile(mp3);
 
 		audio = new (window.AudioContext || window.webkitAudioContext)();
